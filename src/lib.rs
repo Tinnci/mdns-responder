@@ -22,14 +22,16 @@ mod tests {
             .unwrap()
             .as_nanos();
         let unique_instance = format!("Test-Instance-{}", timestamp & 0xFFFF); // Short suffix
-        
-        let mut test_config = crate::config::ServiceConfig::default();
-        test_config.instance_name = unique_instance.clone();
+
         let service_name = "_test._tcp.local.".to_string();
-        test_config.service_name = service_name.clone();
-        
+        let test_config = crate::config::ServiceConfig {
+            instance_name: unique_instance.clone(),
+            service_name: service_name.clone(),
+            ..Default::default()
+        };
+
         let (shutdown_tx, shutdown_rx) = std::sync::mpsc::channel();
-        
+
         let service_thread = std::thread::spawn(move || {
             run(Some(shutdown_rx), Some(test_config)).unwrap();
         });
@@ -41,10 +43,12 @@ mod tests {
 
         let expected_fullname = format!("{}.{}", unique_instance, service_name);
         let mut service_found = false;
-        
+
         // Try for 5 seconds
         for _ in 0..50 {
-            if let Ok(ServiceEvent::ServiceResolved(info)) = receiver.recv_timeout(Duration::from_millis(100)) {
+            if let Ok(ServiceEvent::ServiceResolved(info)) =
+                receiver.recv_timeout(Duration::from_millis(100))
+            {
                 if info.get_fullname() == expected_fullname {
                     service_found = true;
                     break;
@@ -54,10 +58,14 @@ mod tests {
 
         shutdown_tx.send(()).unwrap();
         service_thread.join().unwrap();
-        
+
         // CRITICAL: Clean up daemon
         mdns.shutdown().ok(); // Ignore errors on cleanup
-        
-        assert!(service_found, "mDNS service '{} ({}) ' was not found", unique_instance, expected_fullname);
+
+        assert!(
+            service_found,
+            "mDNS service '{} ({}) ' was not found",
+            unique_instance, expected_fullname
+        );
     }
 }

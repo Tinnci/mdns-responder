@@ -9,15 +9,16 @@ use std::time::Duration;
 #[cfg(debug_assertions)]
 pub fn test_discovery() -> Result<()> {
     info!("Starting service discovery test...");
-    
+
     let daemon = ServiceDaemon::new()
         .map_err(|e| crate::error::MdnsError::Service(format!("Failed to create daemon: {}", e)))?;
-    let receiver = daemon.browse("_smb._tcp.local.")
+    let receiver = daemon
+        .browse("_smb._tcp.local.")
         .map_err(|e| crate::error::MdnsError::Service(format!("Failed to browse: {}", e)))?;
-    
+
     info!("Browsing for SMB services for 10 seconds...");
     let mut found_count = 0;
-    
+
     for _ in 0..10 {
         match receiver.recv_timeout(Duration::from_secs(1)) {
             Ok(ServiceEvent::ServiceResolved(info)) => {
@@ -29,7 +30,7 @@ pub fn test_discovery() -> Result<()> {
             Err(_) => {}
         }
     }
-    
+
     info!("Discovery test complete. Found {} services.", found_count);
     Ok(())
 }

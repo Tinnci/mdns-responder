@@ -13,13 +13,13 @@ const SHUTDOWN_TIMEOUT_SECS: u64 = 5;
 
 fn get_local_ip() -> Result<String> {
     use ipconfig::get_adapters;
-    
+
     // Strategy 1: Find the first valid physical/Ethernet adapter with IPv4
     let adapters = get_adapters()?;
-    
+
     for adapter in adapters {
         let adapter_desc = adapter.description().to_string();
-        
+
         // Skip virtual/VPN interfaces
         if adapter_desc.contains("Virtual")
             || adapter_desc.contains("VPN")
@@ -28,12 +28,12 @@ fn get_local_ip() -> Result<String> {
         {
             continue;
         }
-        
+
         // Check if adapter is up and has IP addresses
         if adapter.ip_addresses().is_empty() {
             continue;
         }
-        
+
         // Find first valid private IPv4 address
         for ip_addr in adapter.ip_addresses() {
             if let IpAddr::V4(ipv4) = ip_addr {
@@ -45,7 +45,7 @@ fn get_local_ip() -> Result<String> {
                     192 if octets[1] == 168 => true,
                     _ => false,
                 };
-                
+
                 if is_private {
                     info!("Selected IP from adapter '{}': {}", adapter_desc, ipv4);
                     return Ok(ipv4.to_string());
@@ -53,7 +53,7 @@ fn get_local_ip() -> Result<String> {
             }
         }
     }
-    
+
     // Fallback: UDP socket method (more reliable than before)
     warn!("No physical adapter found, falling back to UDP socket detection");
     let socket = UdpSocket::bind("0.0.0.0:0")?;
@@ -63,7 +63,10 @@ fn get_local_ip() -> Result<String> {
     Ok(local_addr.ip().to_string())
 }
 
-pub fn run(shutdown_rx: Option<Receiver<()>>, config_override: Option<ServiceConfig>) -> Result<()> {
+pub fn run(
+    shutdown_rx: Option<Receiver<()>>,
+    config_override: Option<ServiceConfig>,
+) -> Result<()> {
     info!("Initializing mDNS Responder Service...");
 
     let config = if let Some(config) = config_override {
@@ -90,16 +93,17 @@ pub fn run(shutdown_rx: Option<Receiver<()>>, config_override: Option<ServiceCon
         detected_ip
     };
 
-    let daemon = Arc::new(ServiceDaemon::new()
-        .map_err(|e| crate::error::MdnsError::Service(e.to_string()))?);
+    let daemon = Arc::new(
+        ServiceDaemon::new().map_err(|e| crate::error::MdnsError::Service(e.to_string()))?,
+    );
 
     let mut txt_records = HashMap::new();
-    
+
     // Standard SMB/CIFS TXT records (RFC 6763 compatible)
     txt_records.insert("vers".to_string(), "3.0".to_string());
     txt_records.insert("nt".to_string(), "hardware".to_string());
     txt_records.insert("flags".to_string(), "1".to_string());
-    
+
     // Custom properties
     txt_records.insert("workgroup".to_string(), config.workgroup.clone());
     txt_records.insert("description".to_string(), config.description.clone());
@@ -125,9 +129,11 @@ pub fn run(shutdown_rx: Option<Receiver<()>>, config_override: Option<ServiceCon
         &ip_addr,
         config.port,
         Some(txt_records),
-    ).map_err(|e| crate::error::MdnsError::Service(e.to_string()))?;
+    )
+    .map_err(|e| crate::error::MdnsError::Service(e.to_string()))?;
 
-    daemon.register(service_info)
+    daemon
+        .register(service_info)
         .map_err(|e| crate::error::MdnsError::Service(e.to_string()))?;
     info!(
         "Successfully registered {} on port {} with IP {}",
@@ -152,10 +158,10 @@ pub fn run(shutdown_rx: Option<Receiver<()>>, config_override: Option<ServiceCon
 
 fn graceful_shutdown(daemon: Arc<ServiceDaemon>) -> Result<()> {
     info!("Initiating graceful shutdown of mDNS daemon...");
-    
+
     let shutdown_result = Arc::new(Mutex::new(None));
     let shutdown_result_clone = Arc::clone(&shutdown_result);
-    
+
     let shutdown_thread = thread::spawn(move || {
         let result = daemon.shutdown();
         let mut locked = shutdown_result_clone.lock().unwrap();
@@ -164,7 +170,7 @@ fn graceful_shutdown(daemon: Arc<ServiceDaemon>) -> Result<()> {
 
     let timeout = Duration::from_secs(SHUTDOWN_TIMEOUT_SECS);
     let start = std::time::Instant::now();
-    
+
     loop {
         if shutdown_thread.is_finished() {
             let result = shutdown_result.lock().unwrap();
@@ -176,12 +182,15 @@ fn graceful_shutdown(daemon: Arc<ServiceDaemon>) -> Result<()> {
                 return Ok(());
             }
         }
-        
+
         if start.elapsed() > timeout {
-            warn!("Daemon shutdown exceeded {}s timeout, but will continue gracefully", SHUTDOWN_TIMEOUT_SECS);
+            warn!(
+                "Daemon shutdown exceeded {}s timeout, but will continue gracefully",
+                SHUTDOWN_TIMEOUT_SECS
+            );
             return Ok(());
         }
-        
+
         thread::sleep(Duration::from_millis(100));
     }
 }

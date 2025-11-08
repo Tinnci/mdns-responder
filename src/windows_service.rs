@@ -15,8 +15,8 @@ use windows_service::{
     service_dispatcher,
 };
 
-use crate::mdns_service;
 use crate::config::ServiceConfig;
+use crate::mdns_service;
 
 const SERVICE_NAME: &str = "MDNSResponder";
 
@@ -31,8 +31,8 @@ pub fn service_main(_args: Vec<OsString>) {
 fn run_service() -> Result<()> {
     let (shutdown_tx, shutdown_rx) = mpsc::channel();
 
-    let status_handle = service_control_handler::register(SERVICE_NAME, move |control| {
-        match control {
+    let status_handle =
+        service_control_handler::register(SERVICE_NAME, move |control| match control {
             ServiceControl::Stop => {
                 info!("Received stop control request");
                 shutdown_tx.send(()).unwrap();
@@ -40,8 +40,7 @@ fn run_service() -> Result<()> {
             }
             ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
             _ => ServiceControlHandlerResult::NotImplemented,
-        }
-    })?;
+        })?;
 
     status_handle.set_service_status(ServiceStatus {
         service_type: ServiceType::OWN_PROCESS,
@@ -53,9 +52,8 @@ fn run_service() -> Result<()> {
         process_id: None,
     })?;
 
-    let service_thread = thread::spawn(move || -> Result<()> {
-        mdns_service::run(Some(shutdown_rx), None)
-    });
+    let service_thread =
+        thread::spawn(move || -> Result<()> { mdns_service::run(Some(shutdown_rx), None) });
 
     status_handle.set_service_status(ServiceStatus {
         service_type: ServiceType::OWN_PROCESS,
@@ -113,7 +111,9 @@ pub fn install() -> Result<()> {
             "Failed to create service. stdout: {}, stderr: {}",
             stdout, stderr
         );
-        return Err(crate::error::MdnsError::Service("Service creation failed".to_string()));
+        return Err(crate::error::MdnsError::Service(
+            "Service creation failed".to_string(),
+        ));
     }
 
     info!("Service installed successfully");
@@ -148,20 +148,18 @@ pub fn install() -> Result<()> {
 pub fn uninstall() -> Result<()> {
     info!("Uninstalling Windows service: {}", SERVICE_NAME);
 
-    Command::new("sc")
-        .args(["stop", SERVICE_NAME])
-        .output()?;
+    Command::new("sc").args(["stop", SERVICE_NAME]).output()?;
 
     thread::sleep(std::time::Duration::from_secs(2));
 
-    let output = Command::new("sc")
-        .args(["delete", SERVICE_NAME])
-        .output()?;
+    let output = Command::new("sc").args(["delete", SERVICE_NAME]).output()?;
 
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr);
         error!("Failed to delete service: {}", error);
-        return Err(crate::error::MdnsError::Service("Service deletion failed".to_string()));
+        return Err(crate::error::MdnsError::Service(
+            "Service deletion failed".to_string(),
+        ));
     }
 
     info!("Service uninstalled successfully");

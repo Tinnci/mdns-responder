@@ -1,8 +1,8 @@
-use mdns_responder::{mdns_service, windows_service};
+use log::info;
+use mdns_responder::Result;
 #[cfg(debug_assertions)]
 use mdns_responder::discovery;
-use mdns_responder::Result;
-use log::info;
+use mdns_responder::{mdns_service, windows_service};
 use std::env;
 
 fn main() -> Result<()> {
