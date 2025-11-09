@@ -114,11 +114,13 @@ pub fn run(
         .collect();
     txt_records.insert("path".to_string(), share_paths.join(","));
 
-    // Ensure hostname ends with .local for proper mDNS resolution
-    let hostname_fqdn = if config.hostname.ends_with(".local") {
+    // Ensure hostname ends with .local. for proper mDNS resolution
+    let hostname_fqdn = if config.hostname.ends_with(".local.") {
         config.hostname.clone()
+    } else if config.hostname.ends_with(".local") {
+        format!("{}.", config.hostname)
     } else {
-        format!("{}.local", config.hostname)
+        format!("{}.local.", config.hostname)
     };
     info!("Using hostname: {}", hostname_fqdn);
 
